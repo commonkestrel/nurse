@@ -156,7 +156,7 @@ impl Span {
 
 #[cfg(not(feature = "serial"))]
 impl Span {
-    pub fn to(&self, other:&Span) -> Span {
+    pub fn to(&self, other: &Span) -> Span {
         Span {
             start: self.start.min(other.start),
             end: self.end.max(other.max),

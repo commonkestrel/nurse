@@ -179,7 +179,7 @@ impl Expr {
                 UnaryOp::Sin => value.into_inner().eval().sin(),
                 UnaryOp::Cos => value.into_inner().eval().cos(),
                 UnaryOp::Tan => value.into_inner().eval().tan(),
-            }
+            },
             Expr::Number(val) => val,
             // Errors should be dealt with when checking the reporter for errors
             Expr::Err => unreachable!(),
@@ -197,7 +197,7 @@ struct BinaryOp {
 impl BinaryOp {
     #[inline]
     fn boxed(left: Spanned<Expr>, right: Spanned<Expr>, op: BinOp) -> Box<BinaryOp> {
-        Box::new(BinaryOp{ left, right, op })
+        Box::new(BinaryOp { left, right, op })
     }
 
     fn eval(self) -> f64 {
@@ -234,7 +234,12 @@ enum UnaryOp {
     Ln,
 }
 
-fn parse_expression(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mut impl Reporter, eof: Span) -> Spanned<Expr> {
+fn parse_expression(
+    stream: &Vec<Spanned<Token>>,
+    index: &mut usize,
+    reporter: &mut impl Reporter,
+    eof: Span,
+) -> Spanned<Expr> {
     let mut a = parse_terminal(stream, index, reporter, eof);
 
     while let Some(tok) = stream.get(*index).as_deref() {
@@ -260,7 +265,12 @@ fn parse_expression(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &
     return a;
 }
 
-fn parse_terminal(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mut impl Reporter, eof: Span) -> Spanned<Expr> {
+fn parse_terminal(
+    stream: &Vec<Spanned<Token>>,
+    index: &mut usize,
+    reporter: &mut impl Reporter,
+    eof: Span,
+) -> Spanned<Expr> {
     let mut a = parse_factor(stream, index, reporter, eof);
 
     while let Some(tok) = stream.get(*index).as_deref() {
@@ -296,7 +306,11 @@ fn parse_terminal(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mu
                 if let Some(tok) = next {
                     *index += 1;
                     if !matches!(tok.inner(), Token::CloseParen) {
-                        reporter.report(spanned_error!(*tok.span(), "unexpected token `{}`; expected closing parenthesis", tok.name()));
+                        reporter.report(spanned_error!(
+                            *tok.span(),
+                            "unexpected token `{}`; expected closing parenthesis",
+                            tok.name()
+                        ));
                         return Spanned::new(Expr::Err, *tok.span());
                     }
                 } else {
@@ -315,19 +329,27 @@ fn parse_terminal(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mu
     return a;
 }
 
-fn parse_factor(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mut impl Reporter, eof: Span) -> Spanned<Expr> {
+fn parse_factor(
+    stream: &Vec<Spanned<Token>>,
+    index: &mut usize,
+    reporter: &mut impl Reporter,
+    eof: Span,
+) -> Spanned<Expr> {
     match stream.get(*index) {
         Some(tok) => {
             *index += 1;
 
             match tok.inner() {
                 Token::Number(num) => Spanned::new(Expr::Number(*num), *tok.span()),
-                Token::Constant(constant) => Spanned::new(Expr::Number(match constant {
-                    Constant::E => std::f64::consts::E,
-                    Constant::Pi => std::f64::consts::PI,
-                    Constant::Tau => std::f64::consts::TAU,
-                    Constant::Phi => PHI,
-                }), *tok.span()),
+                Token::Constant(constant) => Spanned::new(
+                    Expr::Number(match constant {
+                        Constant::E => std::f64::consts::E,
+                        Constant::Pi => std::f64::consts::PI,
+                        Constant::Tau => std::f64::consts::TAU,
+                        Constant::Phi => PHI,
+                    }),
+                    *tok.span(),
+                ),
                 Token::Minus => {
                     let value = parse_factor(stream, index, reporter, eof);
                     let span = tok.span().to(value.span());
@@ -351,7 +373,8 @@ fn parse_factor(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mut 
                     let value = parse_factor(stream, index, reporter, eof);
                     let span = tok.span().to(value.span());
                     let expr = Expr::Unary {
-                        op, value: Box::new(value),
+                        op,
+                        value: Box::new(value),
                     };
 
                     Spanned::new(expr, span)
@@ -363,20 +386,29 @@ fn parse_factor(stream: &Vec<Spanned<Token>>, index: &mut usize, reporter: &mut 
                     let span = if let Some(next) = maybe_next {
                         *index += 1;
                         if !matches!(next.inner(), Token::CloseParen) {
-                            reporter.report(spanned_error!(*next.span(), "unexpected token `{}`; expected closing parenthesis", next.name()));
+                            reporter.report(spanned_error!(
+                                *next.span(),
+                                "unexpected token `{}`; expected closing parenthesis",
+                                next.name()
+                            ));
                             return Spanned::new(Expr::Err, *next.span());
                         }
 
                         tok.span().to(next.span())
                     } else {
-                        reporter.report(spanned_error!(*tok.span(), "unmatched opening parenthesis"));
+                        reporter
+                            .report(spanned_error!(*tok.span(), "unmatched opening parenthesis"));
                         return Spanned::new(Expr::Err, *tok.span());
                     };
 
                     Spanned::new(expr.into_inner(), span)
                 }
                 _ => {
-                    reporter.report(spanned_error!(*tok.span(), "unexpected token {}", tok.name()));
+                    reporter.report(spanned_error!(
+                        *tok.span(),
+                        "unexpected token {}",
+                        tok.name()
+                    ));
                     Spanned::new(Expr::Err, *tok.span())
                 }
             }

@@ -1,10 +1,10 @@
-use std::{collections::HashMap, io};
+use std::io;
 
 use colored::{Color, Colorize};
 use slotmap::SlotMap;
 
 use crate::{
-    diagnostic::{Diagnostic, Level},
+    diagnostic::Diagnostic,
     lookup::{Location, Lookup},
     span::Span,
 };
@@ -27,11 +27,11 @@ impl SerialReporter {
             .insert((name.to_string(), Lookup::new(contents)))
     }
 
-    pub fn emit<E: MaybeTerminal>(&self, emitter: &mut E, diagnostic: Diagnostic) {
+    pub fn emit<E: MaybeTerminal>(&self, emitter: &mut E, diagnostic: Diagnostic) -> io::Result<()> {
         if emitter.is_terminal() {
-            Self::emit_fancy(&self.lookups, emitter, diagnostic);
+            Self::emit_fancy(&self.lookups, emitter, diagnostic)
         } else {
-            Self::raw_emit(emitter, diagnostic);
+            Self::raw_emit(emitter, diagnostic)
         }
     }
 
@@ -40,33 +40,45 @@ impl SerialReporter {
         todo!()
     }
 
-    pub fn emit_all<E: MaybeTerminal>(&mut self, emitter: &mut E) {
+    pub fn emit_all<E: MaybeTerminal>(&mut self, emitter: &mut E) -> io::Result<()> {
+        let mut result = Ok(());
+
         for diagnostic in self.diagnostics.drain(..) {
-            if emitter.is_terminal() {
-                Self::emit_fancy(&self.lookups, emitter, diagnostic);
+            let written = if emitter.is_terminal() {
+                Self::emit_fancy(&self.lookups, emitter, diagnostic)
             } else {
-                Self::raw_emit(emitter, diagnostic);
+                Self::raw_emit(emitter, diagnostic)
+            };
+
+            if let Err(err) = written {
+                result = Err(err);
             }
-            writeln!(emitter);
         }
+
+        result
     }
 
-    fn raw_emit<E: io::Write>(emitter: &mut E, diagnostic: Diagnostic) {
+    fn raw_emit<E: io::Write>(emitter: &mut E, diagnostic: Diagnostic) -> io::Result<()> {
         let title = diagnostic.level.title();
-        writeln!(emitter, "{title}: {}", diagnostic.message);
+        writeln!(emitter, "{title}: {}", diagnostic.message)
     }
 
-    fn emit_fancy<E: io::Write>(lookups: &SlotMap<LookupKey, (String, Lookup)>, emitter: &mut E, diagnostic: Diagnostic) {
+    fn emit_fancy<E: io::Write>(
+        lookups: &SlotMap<LookupKey, (String, Lookup)>,
+        emitter: &mut E,
+        diagnostic: Diagnostic,
+    ) -> io::Result<()> {
         let mut note_offset = diagnostic.level.title().len() + 1;
         let message = diagnostic.format_message();
-        println!("{message}");
+        writeln!(emitter, "{message}")?;
 
         if let Some(span) = diagnostic.span {
             let (pointer, offset) = Self::pointer(lookups, span, diagnostic.level.color());
             note_offset = offset + 1;
-            println!("{pointer}");
+            writeln!(emitter, "{pointer}")?;
         }
 
+        let note = diagnostic.note.is_some();
         if let Some(note) = diagnostic.note {
             writeln!(
                 emitter,
@@ -74,11 +86,21 @@ impl SerialReporter {
                 "=".bright_blue().bold(),
                 "note".bold(),
                 note.value
-            );
+            )?;
         }
+
+        if diagnostic.span.is_some() || note {
+            writeln!(emitter)?;
+        }
+
+        Ok(())
     }
 
-    pub fn pointer(lookups: &SlotMap<LookupKey, (String, Lookup)>, span: Span, arrow_color: Color) -> (String, usize) {
+    pub fn pointer(
+        lookups: &SlotMap<LookupKey, (String, Lookup)>,
+        span: Span,
+        arrow_color: Color,
+    ) -> (String, usize) {
         let (file, lookup) = lookups.get(span.lookup_key()).expect("span should ");
 
         let lines = lookup.lines(span.start()..span.end());
@@ -124,7 +146,7 @@ impl SerialReporter {
             .get(span.lookup_key())
             .expect("span should refer to an already registered file")
             .1;
-        
+
         let (line, column) = lookup.line_col(span.start());
         Location { line, column }
     }
@@ -150,13 +172,16 @@ impl Reporter for SerialReporter {
     }
 
     fn eof_span(&self, key: LookupKey) -> Span {
-        let (_, lookup) = self.lookups.get(key).expect("key should refer to an already registered file");
+        let (_, lookup) = self
+            .lookups
+            .get(key)
+            .expect("key should refer to an already registered file");
 
         let eof = lookup.file_len();
-        
+
         Span {
             start: eof,
-            end: eof+1,
+            end: eof + 1,
             lookup: key,
         }
     }
