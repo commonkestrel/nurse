@@ -1,15 +1,12 @@
-mod span;
-mod diagnostic;
-mod reporter;
+pub mod diagnostic;
 mod lookup;
+pub mod reporter;
+pub mod span;
 
 pub mod prelude {
     pub use super::span::{Span, Spanned};
     pub use super::{
-        error, spanned_error,
-        warning, spanned_warning,
-        info, spanned_info,
-        hint, spanned_hint
+        error, hint, info, spanned_error, spanned_hint, spanned_info, spanned_warning, warning,
     };
 }
 

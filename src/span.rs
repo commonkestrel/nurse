@@ -1,15 +1,21 @@
 use std::{
-    borrow, fmt::{Debug, Formatter}, ops::{self, Range}, sync::Arc
+    borrow,
+    fmt::{Debug, Formatter},
+    ops::{self, Range},
+    sync::Arc,
 };
 
 use colored::{Color, Colorize};
 
-use crate::lookup::{Location, Lookup};
+use crate::{
+    lookup::{Location, Lookup},
+    reporter::LookupKey,
+};
 
 #[derive(PartialEq, Clone)]
 pub struct Spanned<T> {
-    pub inner: T,
-    pub span: Span,
+    inner: T,
+    span: Span,
 }
 
 impl<T> Spanned<T> {
@@ -92,104 +98,68 @@ impl<T> borrow::BorrowMut<T> for Spanned<T> {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[cfg(not(feature = "serial"))]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span {
-    source_name: Arc<String>,
-    lookup: Arc<Lookup>,
-    location: Range<usize>,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
-impl Debug for Span {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Span")
-            .field("source", &self.source_name)
-            .field("location", &self.location)
-            .finish()
-    }
+#[cfg(feature = "serial")]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Span {
+    pub(crate) lookup: LookupKey,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
 impl Span {
-    pub fn new(source_name: Arc<String>, lookup: Arc<Lookup>, location: Range<usize>) -> Self {
+    pub fn new(lookup: LookupKey, location: Range<usize>) -> Self {
         Span {
-            source_name,
             lookup,
-            location,
+            start: location.start,
+            end: location.end,
         }
     }
 
     pub fn start(&self) -> usize {
-        return self.location.start;
+        return self.start;
     }
 
     pub fn end(&self) -> usize {
-        return self.location.end;
+        return self.end;
     }
+}
 
+#[cfg(feature = "serial")]
+impl Span {
     pub fn with_location(mut self, location: Range<usize>) -> Self {
-        self.location = location;
+        self.start = location.start;
+        self.end = location.end;
         self
     }
 
-    pub fn source_name(&self) -> Arc<String> {
-        self.source_name.clone()
-    }
-
-    pub fn lookup(&self) -> Arc<Lookup> {
-        self.lookup.clone()
+    pub fn lookup_key(&self) -> LookupKey {
+        self.lookup
     }
 
     pub fn to(&self, other: &Span) -> Span {
-        debug_assert_eq!(self.source_name, other.source_name);
         debug_assert_eq!(self.lookup, other.lookup);
 
         Span {
-            source_name: self.source_name.clone(),
-            lookup: self.lookup.clone(),
-            location: self.location.start.min(other.location.start)
-                ..self.location.end.max(other.location.end),
+            lookup: self.lookup,
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
         }
     }
+}
 
-    pub fn location(&self) -> Location {
-        let (line, column) = self.lookup.line_col(self.location.start);
-        Location { line, column }
-    }
-
-    pub fn pointer(&self, arrow_color: Color) -> (String, usize) {
-        let lines = self.lookup.lines(self.location.clone());
-        let line_n = lines.start + 1;
-        let col_n = self.lookup.col_from_line(lines.start, self.location.start) + 1;
-
-        if lines.len() > 1 {
-            todo!()
-        } else {
-            let line = self.lookup.line(lines.start).trim_end();
-            let offset = (lines.start + 1).ilog10() as usize + 2;
-
-            (
-                format!(
-                    "\
-                {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
-                {cap:>width$}\n\
-                {n} {line}\n\
-                {cap:>width$} {pointer}\
-                ",
-                    arrow = "-->".bright_blue().bold(),
-                    name = self.source_name,
-                    cap = "|".bright_blue().bold(),
-                    width = offset + 1,
-                    arr_space = offset + 2,
-                    n = format!("{line_n:<offset$}|").bright_blue().bold(),
-                    pointer = format!(
-                        "{blank:>start$}{blank:^>length$}",
-                        blank = "",
-                        start = col_n - 1,
-                        length = self.location.end - self.location.start,
-                    )
-                    .color(arrow_color),
-                ),
-                offset,
-            )
+#[cfg(not(feature = "serial"))]
+impl Span {
+    pub fn to(&self, other:&Span) -> Span {
+        Span {
+            start: self.start.min(other.start),
+            end: self.end.max(other.max),
         }
     }
 }

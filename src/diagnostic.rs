@@ -1,19 +1,14 @@
 use crate::span::Span;
-use std::io;
-use std::io::IsTerminal;
 
-use async_std::{io::WriteExt, sync::RwLock};
 use colored::{Color, ColoredString, Colorize};
-
-use std::sync::Arc;
 
 #[must_use = "Diagnostics should either be emitted or reported!"]
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
-    level: Level,
-    message: String,
-    note: Option<Note>,
-    span: Option<Arc<Span>>,
+    pub(crate) level: Level,
+    pub(crate) message: String,
+    pub(crate) note: Option<Note>,
+    pub(crate) span: Option<Span>,
 }
 
 impl Diagnostic {
@@ -26,12 +21,12 @@ impl Diagnostic {
         }
     }
 
-    pub fn spanned_error<M: Into<String>, S: Into<Arc<Span>>>(span: S, message: M) -> Self {
+    pub fn spanned_error<M: Into<String>>(span: Span, message: M) -> Self {
         Diagnostic {
             level: Level::Error,
             message: message.into(),
             note: None,
-            span: Some(span.into()),
+            span: Some(span),
         }
     }
 
@@ -44,12 +39,12 @@ impl Diagnostic {
         }
     }
 
-    pub fn spanned_warning<M: Into<String>, S: Into<Arc<Span>>>(span: S, message: M) -> Self {
+    pub fn spanned_warning<M: Into<String>>(span: Span, message: M) -> Self {
         Diagnostic {
             level: Level::Warn,
             message: message.into(),
             note: None,
-            span: Some(span.into()),
+            span: Some(span),
         }
     }
 
@@ -62,12 +57,12 @@ impl Diagnostic {
         }
     }
 
-    pub fn spanned_info<M: Into<String>, S: Into<Arc<Span>>>(span: S, message: M) -> Self {
+    pub fn spanned_info<M: Into<String>>(span: Span, message: M) -> Self {
         Diagnostic {
             level: Level::Info,
             message: message.into(),
             note: None,
-            span: Some(span.into()),
+            span: Some(span),
         }
     }
 
@@ -80,21 +75,21 @@ impl Diagnostic {
         }
     }
 
-    pub fn spanned_hint<M: Into<String>, S: Into<Arc<Span>>>(span: S, message: M) -> Self {
+    pub fn spanned_hint<M: Into<String>>(span: Span, message: M) -> Self {
         Diagnostic {
             level: Level::Hint,
             message: message.into(),
             note: None,
-            span: Some(span.into()),
+            span: Some(span),
         }
     }
 
-    pub fn set_span<S: Into<Arc<Span>>>(&mut self, span: Option<S>) {
-        self.span = span.map(|s| s.into());
+    pub fn set_span(&mut self, span: Option<Span>) {
+        self.span = span;
     }
 
     #[inline]
-    pub fn with_span<S: Into<Arc<Span>>>(mut self, span: Option<S>) -> Self {
+    pub fn with_span(mut self, span: Option<Span>) -> Self {
         self.set_span(span);
         self
     }
@@ -152,68 +147,11 @@ impl Diagnostic {
         self.level == Level::Error
     }
 
-    fn format_message(&self) -> ColoredString {
+    pub(crate) fn format_message(&self) -> ColoredString {
         let title = self.level.title();
         let color = self.level.color();
 
         format!("{}: {}", title.color(color), self.message).bold()
-    }
-
-    pub async fn emit(self) {
-        if io::stdout().is_terminal() {
-            self.emit_fancy().await;
-        } else {
-            self.raw_emit().await;
-        }
-    }
-
-    pub fn sync_emit(self) {
-        if io::stdout().is_terminal() {
-            async_std::task::block_on(self.emit_fancy());
-        } else {
-            async_std::task::block_on(self.raw_emit());
-        }
-    }
-
-    async fn raw_emit(self) {
-        let title = match self.level {
-            Level::Error => "error",
-            Level::Warn => "warn",
-            Level::Info => "info",
-            Level::Hint => "hint",
-        };
-
-        writeln!(async_std::io::stdout(), "{title}: {}", self.message)
-            .await
-            .unwrap();
-    }
-
-    async fn emit_fancy(self) {
-        let mut note_offset = self.level.title().len() + 1;
-        let message = self.format_message();
-        writeln!(async_std::io::stdout(), "{message}")
-            .await
-            .unwrap();
-
-        if let Some(span) = self.span {
-            let (pointer, offset) = span.pointer(self.level.color());
-            note_offset = offset + 1;
-            writeln!(async_std::io::stdout(), "{pointer}")
-                .await
-                .unwrap();
-        }
-
-        if let Some(note) = self.note {
-            writeln!(
-                async_std::io::stdout(),
-                "{:>note_offset$} {}: {}",
-                "=".bright_blue().bold(),
-                "note".bold(),
-                note.value
-            )
-            .await
-            .unwrap()
-        }
     }
 }
 
@@ -223,23 +161,10 @@ impl PartialEq for Diagnostic {
     }
 }
 
-// Implemented for `logos` lexing errors
-// Not for program use
-impl Default for Diagnostic {
-    fn default() -> Self {
-        Diagnostic {
-            level: Level::Error,
-            message: String::new(),
-            note: None,
-            span: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
-struct Note {
-    value: String,
-    span: Option<Span>,
+pub(crate) struct Note {
+    pub(crate) value: String,
+    pub(crate) span: Option<Span>,
 }
 
 impl Into<Note> for String {

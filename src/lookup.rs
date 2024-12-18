@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, ops::Range, sync::Arc};
+use std::{cmp::Ordering, ops::Range};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lookup {
@@ -8,8 +8,8 @@ pub struct Lookup {
 
 impl Lookup {
     pub fn new(source: String) -> Self {
-        // Tabs should be replaced with spaces in order to keep character spacing the same
-        debug_assert!(!source.contains('\t'));
+        // Replace tabs with spaces in order to keep character spacing the same
+        let source = source.replace('\t', " ");
 
         let heads = std::iter::once(0)
             .chain(
@@ -70,6 +70,10 @@ impl Lookup {
             }
         }
     }
+
+    pub fn file_len(&self) -> usize {
+        return self.source.len();
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -80,12 +84,14 @@ pub struct Location {
 
 impl PartialOrd for Location {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(match (self.line.cmp(&other.line), self.column.cmp(&other.column)) {
-            (Ordering::Equal, Ordering::Equal) => Ordering::Equal,
-            (Ordering::Equal, Ordering::Greater) => Ordering::Greater,
-            (Ordering::Equal, Ordering::Less) => Ordering::Less,
-            (Ordering::Greater, _) => Ordering::Greater,
-            (Ordering::Less, _) => Ordering::Less,
-        })
+        Some(
+            match (self.line.cmp(&other.line), self.column.cmp(&other.column)) {
+                (Ordering::Equal, Ordering::Equal) => Ordering::Equal,
+                (Ordering::Equal, Ordering::Greater) => Ordering::Greater,
+                (Ordering::Equal, Ordering::Less) => Ordering::Less,
+                (Ordering::Greater, _) => Ordering::Greater,
+                (Ordering::Less, _) => Ordering::Less,
+            },
+        )
     }
 }
