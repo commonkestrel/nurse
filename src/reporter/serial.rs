@@ -108,7 +108,50 @@ impl SerialReporter {
         let col_n = lookup.col_from_line(lines.start, span.start()) + 1;
 
         if lines.len() > 1 {
-            todo!()
+            println!("{lines:?}");
+
+            let start = lookup.line(lines.start).trim_end();
+            let end = lookup.line(lines.end).trim_end();
+
+            let end_col = lookup.col_from_line(lines.end, span.end());
+
+            let offset = (lines.end + 1).ilog10() as usize + 2;
+
+            println!("end: {end}, end.len(): {}, end_col: {end_col}", end.len());
+
+            (
+                format!(
+                    "\
+                    {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
+                    {cap:>width$}\n\
+                    {start_n} {start}\n\
+                    {cap:>width$} {start_pointer}\n\
+                    {end_n} {end}\n\
+                    {cap:>width$} {end_pointer}\n\
+                    ",
+                    arrow = "-->".bright_blue().bold(),
+                    arr_space = offset + 2,
+                    name = file,
+                    cap = "|".bright_blue().bold(),
+                    width = offset + 1,
+                    start_n = format!("{:<offset$}|", lines.start + 1).bright_blue().bold(),
+                    end_n = format!("{:<offset$}|", lines.end + 1).bright_blue().bold(),
+                    start_pointer = format!(
+                        "{blank:>start$}{blank:^>length$}",
+                        blank = "",
+                        start = col_n - 1,
+                        length = end.len() - col_n,
+                    )
+                    .color(arrow_color),
+                    end_pointer = format!(
+                        "{blank:^>length$}",
+                        blank = "",
+                        length = end_col,
+                    )
+                    .color(arrow_color),
+                ),
+                offset,
+            )
         } else {
             let line = lookup.line(lines.start).trim_end();
             let offset = (lines.start + 1).ilog10() as usize + 2;
@@ -116,11 +159,11 @@ impl SerialReporter {
             (
                 format!(
                     "\
-                {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
-                {cap:>width$}\n\
-                {n} {line}\n\
-                {cap:>width$} {pointer}\
-                ",
+                    {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
+                    {cap:>width$}\n\
+                    {n} {line}\n\
+                    {cap:>width$} {pointer}\
+                    ",
                     arrow = "-->".bright_blue().bold(),
                     name = file,
                     cap = "|".bright_blue().bold(),

@@ -5,7 +5,7 @@ use nurse::{
     error,
     reporter::{Reporter, SerialReporter},
     span::{Span, Spanned},
-    spanned_error,
+    spanned_error, spanned_warning,
 };
 
 const PHI: f64 = 1.618033988749894848204586834365638118_f64;
@@ -47,6 +47,8 @@ fn main() -> ExitCode {
 
         return ExitCode::FAILURE;
     }
+
+    reporter.emit_all(&mut std::io::stdout());
 
     println!("Result: {}", expr.into_inner().eval());
 
@@ -394,6 +396,8 @@ fn parse_factor(
                             return Spanned::new(Expr::Err, *next.span());
                         }
 
+                        
+                        reporter.report(spanned_warning!(tok.span().to(next.span()), "parenthesies"));
                         tok.span().to(next.span())
                     } else {
                         reporter
