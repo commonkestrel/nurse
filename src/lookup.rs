@@ -64,7 +64,7 @@ impl Lookup {
             start_line..start_line + 1
         } else {
             // Otherwise perform a binary search through the rest of the lines.
-            match self.heads[start_line + 1..].binary_search(&(span.end - 1)) {
+            match self.heads[start_line..].binary_search(&(span.end - 1)) {
                 Ok(end_line) => start_line..end_line + 1,
                 Err(insert) => start_line..insert,
             }

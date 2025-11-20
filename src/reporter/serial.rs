@@ -202,23 +202,22 @@ impl SerialReporter {
         let col_n = lookup.col_from_line(lines.start, span.start()) + 1;
 
         if lines.len() > 1 {
-            println!("{lines:?}");
-
             let start = lookup.line(lines.start).trim_end();
             let end = lookup.line(lines.end).trim_end();
 
             let end_col = lookup.col_from_line(lines.end, span.end());
 
-            let offset = (lines.end + 1).ilog10() as usize + 2;
+            let offset = ((lines.end + 1).ilog10()).max(2) as usize + 2;
 
             (
                 format!(
                     "\
                     {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
                     {cap:>width$}\n\
-                    {start_n} {start}\n\
+                    {start_n}   {start}\n\
                     {cap:>width$} {start_pointer}\n\
-                    {end_n} {end}\n\
+                    {dot_n}  {pipe}\n\
+                    {end_n} {pipe} {end}\n\
                     {cap:>width$} {end_pointer}\n\
                     ",
                     arrow = "-->".bright_blue().bold(),
@@ -229,16 +228,20 @@ impl SerialReporter {
                     start_n = format!("{:<offset$}|", lines.start + 1)
                         .bright_blue()
                         .bold(),
+                    dot_n = format!("{:<offset$}", "...")
+                        .bright_blue()
+                        .bold(),
                     end_n = format!("{:<offset$}|", lines.end + 1).bright_blue().bold(),
                     start_pointer = format!(
-                        "{blank:>start$}{blank:^>length$}",
+                        ",-{blank:->start$}{blank:^>length$}",
                         blank = "",
                         start = col_n - 1,
-                        length = end.len() - col_n,
+                        length = start.len() - col_n + 1,
                     )
                     .color(arrow_color),
-                    end_pointer = format!("{blank:^>length$}", blank = "", length = end_col,)
+                    end_pointer = format!("'-{blank:^>length$}", blank = "", length = end_col)
                         .color(arrow_color),
+                    pipe = "|".color(arrow_color)
                 ),
                 offset,
             )
