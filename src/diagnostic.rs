@@ -1,4 +1,5 @@
 use crate::span::Span;
+use concat_idents::concat_idents;
 
 use colored::{Color, ColoredString, Colorize};
 
@@ -11,79 +12,52 @@ pub struct Diagnostic {
     pub(crate) span: Option<Span>,
 }
 
+macro_rules! diagnostic_level {
+    (($d:tt) $name:ident) => {
+        #[macro_export]
+        macro_rules! $name {
+            ($fmt:literal $d($arg:tt)*) => ($crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)));
+            ($span:expr, $fmt:literal $d($arg:tt)*) => {{
+                use $crate::span::MaybeSpanned;
+                match $span.get_span() {
+                    Some(span) => $crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)).with_span(Some(span)),
+                    None => $crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*))
+                }
+            }};
+        }
+    };
+    ($name:ident, $variant:ident) => {
+        impl Diagnostic {
+            pub fn $name<S: Into<String>>(message: S) -> Diagnostic {
+                Diagnostic {
+                    level: Level::$variant,
+                    message: message.into(),
+                    note: None,
+                    span: None,
+                }
+            }
+
+            concat_idents!{spanned = spanned_, $name {
+                pub fn spanned<M: Into<String>>(span: Span, message: M) -> Diagnostic {
+                    Diagnostic {
+                        level: Level::$variant,
+                        message: message.into(),
+                        note: None,
+                        span: Some(span),
+                    }
+                }
+            }}
+        }
+
+        diagnostic_level!(($) $name);
+    }
+}
+diagnostic_level!(error, Error);
+diagnostic_level!(warn, Warn);
+diagnostic_level!(info, Info);
+diagnostic_level!(hint, Hint);
+
 impl Diagnostic {
-    pub fn error<S: Into<String>>(message: S) -> Self {
-        Diagnostic {
-            level: Level::Error,
-            message: message.into(),
-            note: None,
-            span: None,
-        }
-    }
-
-    pub fn spanned_error<M: Into<String>>(span: Span, message: M) -> Self {
-        Diagnostic {
-            level: Level::Error,
-            message: message.into(),
-            note: None,
-            span: Some(span),
-        }
-    }
-
-    pub fn warning<S: Into<String>>(message: S) -> Self {
-        Diagnostic {
-            level: Level::Warn,
-            message: message.into(),
-            note: None,
-            span: None,
-        }
-    }
-
-    pub fn spanned_warning<M: Into<String>>(span: Span, message: M) -> Self {
-        Diagnostic {
-            level: Level::Warn,
-            message: message.into(),
-            note: None,
-            span: Some(span),
-        }
-    }
-
-    pub fn info<S: Into<String>>(message: S) -> Self {
-        Diagnostic {
-            level: Level::Info,
-            message: message.into(),
-            note: None,
-            span: None,
-        }
-    }
-
-    pub fn spanned_info<M: Into<String>>(span: Span, message: M) -> Self {
-        Diagnostic {
-            level: Level::Info,
-            message: message.into(),
-            note: None,
-            span: Some(span),
-        }
-    }
-
-    pub fn hint<S: Into<String>>(message: S) -> Self {
-        Diagnostic {
-            level: Level::Hint,
-            message: message.into(),
-            note: None,
-            span: None,
-        }
-    }
-
-    pub fn spanned_hint<M: Into<String>>(span: Span, message: M) -> Self {
-        Diagnostic {
-            level: Level::Hint,
-            message: message.into(),
-            note: None,
-            span: Some(span),
-        }
-    }
-
     pub fn set_span(&mut self, span: Option<Span>) {
         self.span = span;
     }
@@ -162,7 +136,7 @@ impl PartialEq for Diagnostic {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Note {
+pub struct Note {
     pub(crate) value: String,
     pub(crate) span: Option<Span>,
 }
@@ -211,44 +185,4 @@ impl Level {
             Level::Hint => Color::Cyan,
         }
     }
-}
-
-#[macro_export]
-macro_rules! error {
-    ($($arg:tt)*) => ($crate::diagnostic::Diagnostic::error(::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! spanned_error {
-    ($span:expr, $($arg:tt)*) => ($crate::diagnostic::Diagnostic::spanned_error($span, ::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! warning {
-    ($($arg:tt)*) => ($crate::diagnostic::Diagnostic::warning(::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! spanned_warning {
-    ($span:expr, $($arg:tt)*) => ($crate::diagnostic::Diagnostic::spanned_warning($span, ::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! info {
-    ($($arg:tt)*) => ($crate::diagnostic::Diagnostic::info(::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! spanned_info {
-    ($span:expr, $($arg:tt)*) => ($crate::diagnostic::Diagnostic::spanned_info($span, ::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! hint {
-    ($($arg:tt)*) => ($crate::diagnostic::Diagnostic::debug(::std::format!($($arg)*)))
-}
-
-#[macro_export]
-macro_rules! spanned_hint {
-    ($span:expr, $($arg:tt)*) => ($crate::diagnostic::Diagnostic::spanned_debug($span, ::std::format!($($arg)*)))
 }

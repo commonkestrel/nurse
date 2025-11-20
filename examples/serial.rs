@@ -3,9 +3,9 @@ use std::{fs, process::ExitCode};
 use logos::{Lexer, Logos};
 use nurse::{
     error,
-    reporter::{Reporter, SerialReporter},
+    reporter::Reporter,
     span::{Span, Spanned},
-    spanned_error, spanned_warning,
+    warn,
 };
 
 const PHI: f64 = 1.618033988749894848204586834365638118_f64;
@@ -13,7 +13,7 @@ const PHI: f64 = 1.618033988749894848204586834365638118_f64;
 fn main() -> ExitCode {
     let file = fs::read_to_string("examples/serial.txt").expect("unable to open `serial.txt`");
 
-    let mut reporter = SerialReporter::default();
+    let mut reporter = Reporter::default();
     let lookup = reporter.register_file("serial.txt", file.clone());
     let eof = reporter.eof_span(lookup);
 
@@ -26,16 +26,16 @@ fn main() -> ExitCode {
         match token {
             Ok(tok) => tokens.push(Spanned::new(tok, span)),
             Err(err) => reporter.report(if err.is_empty() {
-                spanned_error!(span, "unknown token")
+                error!(span, "unknown token")
             } else {
-                spanned_error!(span, "{err}")
+                error!(span, "{err}")
             }),
         }
     }
 
     if reporter.has_errors() {
         reporter.report(error!("unable to compile due to previous syntax errors"));
-        reporter.emit_all(&mut std::io::stdout());
+        let _ = reporter.emit_all(&mut std::io::stdout());
 
         return ExitCode::FAILURE;
     }
@@ -43,12 +43,12 @@ fn main() -> ExitCode {
     let expr = parse_expression(&tokens, &mut 0, &mut reporter, eof);
     if reporter.has_errors() {
         reporter.report(error!("unable to compile due to previous syntax errors"));
-        reporter.emit_all(&mut std::io::stdout());
+        let _ = reporter.emit_all(&mut std::io::stdout());
 
         return ExitCode::FAILURE;
     }
 
-    reporter.emit_all(&mut std::io::stdout());
+    let _ = reporter.emit_all(&mut std::io::stdout());
 
     println!("Result: {}", expr.into_inner().eval());
 
@@ -239,7 +239,7 @@ enum UnaryOp {
 fn parse_expression(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut impl Reporter,
+    reporter: &mut Reporter,
     eof: Span,
 ) -> Spanned<Expr> {
     let mut a = parse_terminal(stream, index, reporter, eof);
@@ -270,7 +270,7 @@ fn parse_expression(
 fn parse_terminal(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut impl Reporter,
+    reporter: &mut Reporter,
     eof: Span,
 ) -> Spanned<Expr> {
     let mut a = parse_factor(stream, index, reporter, eof);
@@ -308,16 +308,16 @@ fn parse_terminal(
                 if let Some(tok) = next {
                     *index += 1;
                     if !matches!(tok.inner(), Token::CloseParen) {
-                        reporter.report(spanned_error!(
-                            *tok.span(),
+                        reporter.report(error!(
+                            tok.span(),
                             "unexpected token `{}`; expected closing parenthesis",
                             tok.name()
                         ));
-                        return Spanned::new(Expr::Err, *tok.span());
+                        return Spanned::new(Expr::Err, tok.span());
                     }
                 } else {
-                    reporter.report(spanned_error!(*start_span, "unmatched opening parenthesis"));
-                    return Spanned::new(Expr::Err, *start_span);
+                    reporter.report(error!(start_span, "unmatched opening parenthesis"));
+                    return Spanned::new(Expr::Err, start_span);
                 }
 
                 let span = a.span().to(b.span());
@@ -334,7 +334,7 @@ fn parse_terminal(
 fn parse_factor(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut impl Reporter,
+    reporter: &mut Reporter,
     eof: Span,
 ) -> Spanned<Expr> {
     match stream.get(*index) {
@@ -342,7 +342,7 @@ fn parse_factor(
             *index += 1;
 
             match tok.inner() {
-                Token::Number(num) => Spanned::new(Expr::Number(*num), *tok.span()),
+                Token::Number(num) => Spanned::new(Expr::Number(*num), tok.span()),
                 Token::Constant(constant) => Spanned::new(
                     Expr::Number(match constant {
                         Constant::E => std::f64::consts::E,
@@ -350,7 +350,7 @@ fn parse_factor(
                         Constant::Tau => std::f64::consts::TAU,
                         Constant::Phi => PHI,
                     }),
-                    *tok.span(),
+                    tok.span(),
                 ),
                 Token::Minus => {
                     let value = parse_factor(stream, index, reporter, eof);
@@ -388,37 +388,31 @@ fn parse_factor(
                     let span = if let Some(next) = maybe_next {
                         *index += 1;
                         if !matches!(next.inner(), Token::CloseParen) {
-                            reporter.report(spanned_error!(
-                                *next.span(),
+                            reporter.report(error!(
+                                next.span(),
                                 "unexpected token `{}`; expected closing parenthesis",
                                 next.name()
                             ));
-                            return Spanned::new(Expr::Err, *next.span());
+                            return Spanned::new(Expr::Err, next.span());
                         }
 
-                        
-                        reporter.report(spanned_warning!(tok.span().to(next.span()), "parenthesies"));
+                        reporter.report(warn!(tok.span().to(next.span()), "parenthesies"));
                         tok.span().to(next.span())
                     } else {
-                        reporter
-                            .report(spanned_error!(*tok.span(), "unmatched opening parenthesis"));
-                        return Spanned::new(Expr::Err, *tok.span());
+                        reporter.report(error!(tok.span(), "unmatched opening parenthesis"));
+                        return Spanned::new(Expr::Err, tok.span());
                     };
 
                     Spanned::new(expr.into_inner(), span)
                 }
                 _ => {
-                    reporter.report(spanned_error!(
-                        *tok.span(),
-                        "unexpected token {}",
-                        tok.name()
-                    ));
-                    Spanned::new(Expr::Err, *tok.span())
+                    reporter.report(error!(tok.span(), "unexpected token {}", tok.name()));
+                    Spanned::new(Expr::Err, tok.span())
                 }
             }
         }
         None => {
-            reporter.report(spanned_error!(eof, "expected expression, found `eof`"));
+            reporter.report(error!(eof, "expected expression, found `eof`"));
             return Spanned::new(Expr::Err, eof);
         }
     }

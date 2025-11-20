@@ -2,15 +2,9 @@ use std::{
     borrow,
     fmt::{Debug, Formatter},
     ops::{self, Range},
-    sync::Arc,
 };
 
-use colored::{Color, Colorize};
-
-use crate::{
-    lookup::{Location, Lookup},
-    reporter::LookupKey,
-};
+use crate::reporter::LookupKey;
 
 #[derive(PartialEq, Clone)]
 pub struct Spanned<T> {
@@ -40,12 +34,7 @@ impl<T> Spanned<T> {
     }
 
     #[inline]
-    pub fn span(&self) -> &Span {
-        &self.span
-    }
-
-    #[inline]
-    pub fn into_span(self) -> Span {
+    pub fn span(&self) -> Span {
         self.span
     }
 
@@ -143,11 +132,11 @@ impl Span {
         self.lookup
     }
 
-    pub fn to(&self, other: &Span) -> Span {
-        debug_assert_eq!(self.lookup, other.lookup);
+    pub fn to(&self, other: Span) -> Span {
+        assert_eq!(self.lookup, other.lookup);
 
         Span {
-            lookup: self.lookup,
+            lookup: other.lookup,
             start: self.start.min(other.start),
             end: self.end.max(other.end),
         }
@@ -156,10 +145,31 @@ impl Span {
 
 #[cfg(not(feature = "serial"))]
 impl Span {
-    pub fn to(&self, other: &Span) -> Span {
+    pub fn to(&self, other: Span) -> Span {
         Span {
             start: self.start.min(other.start),
             end: self.end.max(other.max),
         }
+    }
+}
+
+pub trait MaybeSpanned {
+    #[inline]
+    fn get_span(&self) -> Option<Span> {
+        None
+    }
+}
+
+impl MaybeSpanned for Span {
+    #[inline]
+    fn get_span(&self) -> Option<Span> {
+        return Some(*self);
+    }
+}
+
+impl<T> MaybeSpanned for Spanned<T> {
+    #[inline]
+    fn get_span(&self) -> Option<Span> {
+        return Some(self.span);
     }
 }
