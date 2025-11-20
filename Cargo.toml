@@ -5,6 +5,8 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["commonkestrel"]
+rust-version = "1.78"
+readme = "README.md"
 
 [dependencies]
 url = { version = "2.5.4", optional = true }

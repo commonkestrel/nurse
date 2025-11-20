@@ -1,10 +1,10 @@
 #[cfg(feature = "lsp")]
-mod lsp;
+pub mod lsp;
 #[cfg(feature = "lsp")]
 pub type Reporter = lsp::LspReporter;
 
 #[cfg(feature = "serial")]
-mod serial;
+pub mod serial;
 #[cfg(feature = "serial")]
 pub type Reporter = serial::SerialReporter;
 
