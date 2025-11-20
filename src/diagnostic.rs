@@ -19,10 +19,7 @@ macro_rules! diagnostic_level {
             ($fmt:literal $d($arg:tt)*) => ($crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)));
             ($span:expr, $fmt:literal $d($arg:tt)*) => {{
                 use $crate::span::MaybeSpanned;
-                match $span.get_span() {
-                    Some(span) => $crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)).with_span(Some(span)),
-                    None => $crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*))
-                }
+                $crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)).with_span($span.get_span())
             }};
         }
     };
