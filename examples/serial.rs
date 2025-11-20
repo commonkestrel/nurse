@@ -2,7 +2,7 @@ use std::{fs, process::ExitCode};
 
 use logos::{Lexer, Logos};
 use nurse::{
-    error,
+    error, hint, info,
     reporter::Reporter,
     span::{Span, Spanned},
     warn,
@@ -50,7 +50,10 @@ fn main() -> ExitCode {
 
     let _ = reporter.emit_all(&mut std::io::stdout());
 
-    println!("Result: {}", expr.into_inner().eval());
+    let _ = reporter.emit(
+        &mut std::io::stdout(),
+        hint!("Result: {}", expr.into_inner().eval()),
+    );
 
     ExitCode::SUCCESS
 }
@@ -396,7 +399,6 @@ fn parse_factor(
                             return Spanned::new(Expr::Err, next.span());
                         }
 
-                        reporter.report(warn!(tok.span().to(next.span()), "parenthesies"));
                         tok.span().to(next.span())
                     } else {
                         reporter.report(error!(tok.span(), "unmatched opening parenthesis"));

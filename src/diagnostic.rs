@@ -1,7 +1,7 @@
 use crate::span::Span;
 use concat_idents::concat_idents;
 
-use colored::{Color, ColoredString, Colorize};
+use colored::{Color, Colorize};
 
 #[must_use = "Diagnostics should either be emitted or reported!"]
 #[derive(Debug, Clone)]
@@ -121,11 +121,11 @@ impl Diagnostic {
         self.level == Level::Error
     }
 
-    pub(crate) fn format_message(&self) -> ColoredString {
+    pub(crate) fn format_message(&self) -> String {
         let title = self.level.title();
         let color = self.level.color();
 
-        format!("{}: {}", title.color(color), self.message).bold()
+        format!("{}: {}", title.color(color).bold(), self.message)
     }
 }
 

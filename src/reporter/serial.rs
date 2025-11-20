@@ -228,9 +228,7 @@ impl SerialReporter {
                     start_n = format!("{:<offset$}|", lines.start + 1)
                         .bright_blue()
                         .bold(),
-                    dot_n = format!("{:<offset$}", "...")
-                        .bright_blue()
-                        .bold(),
+                    dot_n = format!("{:<offset$}", "...").bright_blue().bold(),
                     end_n = format!("{:<offset$}|", lines.end + 1).bright_blue().bold(),
                     start_pointer = format!(
                         ",-{blank:->start$}{blank:^>length$}",
