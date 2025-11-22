@@ -31,3 +31,13 @@ fn main() -> io::Result<()> {
     reporter.emit_all(&mut io::stdout())
 }
 ```
+
+## Features
+
+There are a number of features that allow for additional functionality,
+and are as follows:
+
+- `terminal`: Enabled by default. Allows for diagnostics to be formatted and printed to a writer, commonly stdout.
+- `lsp`: Allows for diagnostics to be reported as a language server message.
+- `smol`: Allows for many of the I/O writing operations to be async using [`smol`](https://github.com/smol-rs/smol).
+- `tokio`: Allows for many of the I/O writing operations to be async using [`tokio`](https://github.com/tokio-rs/tokio)

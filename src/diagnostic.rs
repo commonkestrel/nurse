@@ -60,10 +60,10 @@ macro_rules! diagnostic_level {
         /// ```
         #[macro_export]
         macro_rules! $name {
-            ($fmt:literal $d($arg:tt)*) => ($crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)));
+            ($fmt:literal $d($arg:tt)*) => ($crate::Diagnostic::$name(::std::format!($fmt $d($arg)*)));
             ($span:expr, $fmt:literal $d($arg:tt)*) => {{
-                use $crate::span::MaybeSpanned;
-                $crate::diagnostic::Diagnostic::$name(::std::format!($fmt $d($arg)*)).with_span($span.get_span())
+                use $crate::MaybeSpanned;
+                $crate::Diagnostic::$name(::std::format!($fmt $d($arg)*)).with_span($span.get_span())
             }};
         }
 

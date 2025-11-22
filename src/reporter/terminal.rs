@@ -274,9 +274,9 @@ impl TerminalReporter {
                     {end_n} {pipe} {end}\n\
                     {cap:>width$} {end_pointer}\n\
                     ",
-                    arrow = "-->".bright_blue().bold(),
+                    arrow = "——>".bright_blue().bold(),
                     arr_space = offset + 2,
-                    name = file.bold().cyan(),
+                    name = file.bold().bright_cyan().underline(),
                     cap = "┃".bright_blue().bold(),
                     width = offset + 1,
                     start_n = format!("{:<offset$}┃", lines.start + 1)
@@ -292,7 +292,7 @@ impl TerminalReporter {
                         length = start.len() - col_n + 1,
                     )
                     .color(arrow_color),
-                    end_pointer = format!("╰─{blank:—>length$}", blank = "", length = end_col)
+                    end_pointer = format!("╰─{blank:─>length$}", blank = "", length = end_col)
                         .color(arrow_color),
                     pipe = "│".color(arrow_color)
                 ),
@@ -310,7 +310,7 @@ impl TerminalReporter {
                     {n}{cap} {line}\n\
                     {cap:>width$} {pointer}\
                     ",
-                    arrow = "-->".bright_blue().bold(),
+                    arrow = "——>".bright_blue().bold(),
                     name = file.bold().bright_cyan().underline(),
                     cap = "┃".bright_blue().bold(),
                     width = offset + 1,

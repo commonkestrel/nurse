@@ -1,10 +1,14 @@
 #![doc = include_str!("DOC.md")]
 #![warn(missing_docs)]
 
-pub mod diagnostic;
+mod diagnostic;
 mod lookup;
-pub mod reporter;
-pub mod span;
+mod reporter;
+mod span;
+
+pub use diagnostic::*;
+pub use reporter::*;
+pub use span::*;
 
 /// Re-exports most of the commonly used st ructures and macros from the crate.
 /// Designed to be used as a glob import (e.g. `use nurse::prelude::*`)
