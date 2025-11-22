@@ -4,7 +4,7 @@ this crate allows user-facing text-processors to provide users with detailed and
 
 ## Example
 
-![Example terminal formatting, with multiline spans!](https://raw.githubusercontent.com/commonkestrel/nurse/refs/heads/master/misc/terminal_example.png)
+![Example terminal formatting, with multiline spans!](https://raw.githubusercontent.com/commonkestrel/nurse/refs/heads/main/misc/terminal_example.png)
 ```rust
 use nurse::prelude::*;
 use std::io;
