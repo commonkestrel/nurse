@@ -1,20 +1,15 @@
 use std::{fs, process::ExitCode};
 
 use logos::{Lexer, Logos};
-use nurse::{
-    error, hint, info,
-    reporter::Reporter,
-    span::{Span, Spanned},
-    warn,
-};
+use nurse::prelude::*;
 
 const PHI: f64 = 1.618033988749894848204586834365638118_f64;
 
 fn main() -> ExitCode {
-    let file = fs::read_to_string("examples/serial.txt").expect("unable to open `serial.txt`");
+    let file = fs::read_to_string("examples/math.txt").expect("unable to open `math.txt`");
 
-    let mut reporter = Reporter::default();
-    let lookup = reporter.register_file("serial.txt", file.clone());
+    let mut reporter = TerminalReporter::default();
+    let lookup = reporter.register_file("math.txt", file.clone());
     let eof = reporter.eof_span(lookup);
 
     let mut tokens = Vec::new();
@@ -52,11 +47,13 @@ fn main() -> ExitCode {
 
     let _ = reporter.emit(
         &mut std::io::stdout(),
-        hint!("Result: {}", expr.into_inner().eval()),
+        debug!("Result: {}", expr.into_inner().eval()),
     );
 
     ExitCode::SUCCESS
 }
+
+// Lexing (uses lexos)
 
 #[derive(Logos, Debug, Clone, Copy)]
 #[logos(error = String)]
@@ -161,6 +158,8 @@ impl Function {
     }
 }
 
+// Parsing and evaluation
+
 #[derive(Debug)]
 enum Expr {
     Binary(Box<BinaryOp>),
@@ -242,7 +241,7 @@ enum UnaryOp {
 fn parse_expression(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut Reporter,
+    reporter: &mut TerminalReporter,
     eof: Span,
 ) -> Spanned<Expr> {
     let mut a = parse_terminal(stream, index, reporter, eof);
@@ -273,7 +272,7 @@ fn parse_expression(
 fn parse_terminal(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut Reporter,
+    reporter: &mut TerminalReporter,
     eof: Span,
 ) -> Spanned<Expr> {
     let mut a = parse_factor(stream, index, reporter, eof);
@@ -337,7 +336,7 @@ fn parse_terminal(
 fn parse_factor(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut Reporter,
+    reporter: &mut TerminalReporter,
     eof: Span,
 ) -> Spanned<Expr> {
     match stream.get(*index) {
@@ -398,7 +397,7 @@ fn parse_factor(
                             ));
                             return Spanned::new(Expr::Err, next.span());
                         }
-
+                        reporter.report(debug!(tok.span().to(next.span()), "parentheses"));
                         tok.span().to(next.span())
                     } else {
                         reporter.report(error!(tok.span(), "unmatched opening parenthesis"));

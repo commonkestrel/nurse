@@ -1,11 +1,3 @@
-Nurse is a diagnostic formatting library designed for internal use in compilers, interpreters, and assemblers.
-Designed after the Rust compiler's error message formatting,
-this crate allows user-facing text-processors to provide users with detailed and informative error messages.
-
-## Example
-
-![Example terminal formatting, with multiline spans!](https://raw.githubusercontent.com/commonkestrel/nurse/refs/heads/master/misc/terminal_example.png)
-```rust
 use nurse::prelude::*;
 use std::io;
 
@@ -17,7 +9,7 @@ fn main() -> io::Result<()> {
     // Create a new reporter and register the example file
     let mut reporter = TerminalReporter::default();
     let lookup = reporter.register_file("example.txt", file);
-    
+
     // Create spans for `(` and `"hello world"` based on character positions
     let open_paren_span = Span::new(lookup, 24..25);
     let fn_span = Span::new(lookup, 10..41);
@@ -30,4 +22,3 @@ fn main() -> io::Result<()> {
     // Emit all messages that were previously reported to stdout
     reporter.emit_all(&mut io::stdout())
 }
-```

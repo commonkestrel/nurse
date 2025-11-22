@@ -1,5 +1,9 @@
+//! Containing utilities surrounding [`Lookup`].
+
 use std::{cmp::Ordering, ops::Range};
 
+/// Internal file lookup-table used in [`Reporter`](crate::reporter::Reporter)s
+/// to locate lines, columns, and text.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lookup {
     source: String,
@@ -25,7 +29,7 @@ impl Lookup {
     pub fn line_n(&self, index: usize) -> usize {
         match self.heads.binary_search(&index) {
             Ok(line) => line,
-            Err(insert) => insert - 1,
+            Err(insert) => (insert - 1),
         }
     }
 
@@ -51,7 +55,6 @@ impl Lookup {
 
     pub fn line(&self, index: usize) -> &str {
         let range = self.heads[index]..(*self.heads.get(index + 1).unwrap_or(&self.source.len()));
-
         &self.source[range]
     }
 
@@ -76,9 +79,13 @@ impl Lookup {
     }
 }
 
+/// A location within a file,
+/// using line-column indexing as opposed to character indices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Location {
+    /// The line of the character
     pub line: usize,
+    /// The column of the character on the `line`
     pub column: usize,
 }
 

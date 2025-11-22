@@ -11,7 +11,7 @@ use colored::{Color, Colorize};
 use slotmap::SlotMap;
 
 use crate::{
-    diagnostic::Diagnostic,
+    diagnostic::{Diagnostic, LevelFilter},
     lookup::{Location, Lookup},
     span::Span,
 };
@@ -19,27 +19,45 @@ use crate::{
 use super::LookupKey;
 
 #[derive(Debug, Clone)]
-pub struct SerialReporter {
+pub struct TerminalReporter {
     diagnostics: Vec<Diagnostic>,
     lookups: SlotMap<LookupKey, (String, Lookup)>,
+    filter: LevelFilter,
 }
 
-impl SerialReporter {
-    pub fn new() -> SerialReporter {
-        Self::default()
+impl TerminalReporter {
+    /// Creates an empty `TerminalReporter` with the given filter level.
+    pub fn new(filter: LevelFilter) -> TerminalReporter {
+        TerminalReporter {
+            diagnostics: Vec::new(),
+            lookups: SlotMap::with_key(),
+            filter,
+        }
     }
 
+    /// Inserts a file into the lookup table with the given filename and contents,
+    /// returning the [`LookupKey`] associated with it.
+    /// This lookup key must only be used with the reporter it was registered with.
+    ///
+    /// This operation can be computationally intensive,
+    /// depending on the file size.
     pub fn register_file<N: ToString, F: ToString>(&mut self, name: N, contents: F) -> LookupKey {
         self.lookups
             .insert((name.to_string(), Lookup::new(contents.to_string())))
     }
 
+    /// Prints a diagnostic to the given emitter,
+    /// generally [`Stdout`](std::io::Stdout).
     #[cfg(not(any(feature = "smol", feature = "tokio")))]
     pub fn emit<E: MaybeTerminal>(
         &self,
         emitter: &mut E,
         diagnostic: Diagnostic,
     ) -> io::Result<()> {
+        if !self.filter.passes(diagnostic.level) {
+            return Ok(());
+        }
+
         if emitter.is_terminal() {
             Self::emit_fancy(&self.lookups, emitter, diagnostic)
         } else {
@@ -48,11 +66,23 @@ impl SerialReporter {
     }
 
     #[cfg(any(feature = "smol", feature = "tokio"))]
+    #[cfg_attr(
+        feature = "smol",
+        doc = "Prints a diagnostic to the given emitter, generally [`Unblock<Stdout>`](smol::Unblock)."
+    )]
+    #[cfg_attr(
+        feature = "tokio",
+        doc = "Prints a diagnostic to the given emitter, generally [`Stdout`](tokio::io::Stdout)."
+    )]
     pub async fn emit<E: MaybeAsyncTerminal + std::marker::Unpin>(
         &self,
         emitter: &mut E,
         diagnostic: Diagnostic,
     ) -> std::io::Result<()> {
+        if !self.filter.passes(diagnostic.level) {
+            return Ok(());
+        }
+
         if emitter.is_terminal() {
             Self::emit_fancy(&self.lookups, emitter, diagnostic).await
         } else {
@@ -60,11 +90,20 @@ impl SerialReporter {
         }
     }
 
+    /// Prints all reported diagnostics to the provided `emitter`,
+    /// generally [`Stdout`](std::io::Stdout).
+    ///
+    /// Clears the store of reported diagnostics,
+    /// causing subsequent calls not to repeat already emitted diagnostics.
     #[cfg(not(any(feature = "smol", feature = "tokio")))]
     pub fn emit_all<E: MaybeTerminal>(&mut self, emitter: &mut E) -> io::Result<()> {
         let mut result = Ok(());
 
         for diagnostic in self.diagnostics.drain(..) {
+            if !self.filter.passes(diagnostic.level) {
+                continue;
+            }
+
             let written = if emitter.is_terminal() {
                 Self::emit_fancy(&self.lookups, emitter, diagnostic)
             } else {
@@ -80,6 +119,17 @@ impl SerialReporter {
     }
 
     #[cfg(any(feature = "smol", feature = "tokio"))]
+    #[cfg_attr(
+        feature = "smol",
+        doc = "Prints all reported diagnostics to the provided `emitter`, generally [`Unblock<Stdout>`](smol::Unblock)."
+    )]
+    #[cfg_attr(
+        feature = "tokio",
+        doc = "Prints all reported diagnostics to the provided `emitter`, generally [`Stdout`](tokio::io::Stdout)."
+    )]
+    ///
+    /// Clears the store of reported diagnostics,
+    /// causing subsequent calls not to repeat already emitted diagnostics.
     pub async fn emit_all<E: MaybeAsyncTerminal + std::marker::Unpin>(
         &mut self,
         emitter: &mut E,
@@ -87,6 +137,10 @@ impl SerialReporter {
         let mut result = Ok(());
 
         for diagnostic in self.diagnostics.drain(..) {
+            if !self.filter.passes(diagnostic.level) {
+                continue;
+            }
+
             let written = if emitter.is_terminal() {
                 Self::emit_fancy(&self.lookups, emitter, diagnostic).await
             } else {
@@ -195,7 +249,7 @@ impl SerialReporter {
         span: Span,
         arrow_color: Color,
     ) -> (String, usize) {
-        let (file, lookup) = lookups.get(span.lookup_key()).expect("span should ");
+        let (file, lookup) = lookups.get(span.lookup()).expect("span should ");
 
         let lines = lookup.lines(span.start()..span.end());
         let line_n = lines.start + 1;
@@ -203,16 +257,16 @@ impl SerialReporter {
 
         if lines.len() > 1 {
             let start = lookup.line(lines.start).trim_end();
-            let end = lookup.line(lines.end).trim_end();
+            let end = lookup.line(lines.end-1).trim_end();
 
-            let end_col = lookup.col_from_line(lines.end, span.end());
+            let end_col = lookup.col_from_line(lines.end-1, span.end());
 
             let offset = ((lines.end + 1).ilog10()).max(2) as usize + 2;
 
             (
                 format!(
                     "\
-                    {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
+                    {arrow:>arr_space$} [{name}:{line_n}:{col_n}]\n\
                     {cap:>width$}\n\
                     {start_n}   {start}\n\
                     {cap:>width$} {start_pointer}\n\
@@ -222,24 +276,25 @@ impl SerialReporter {
                     ",
                     arrow = "-->".bright_blue().bold(),
                     arr_space = offset + 2,
-                    name = file,
-                    cap = "|".bright_blue().bold(),
+                    name = file.bold().cyan(),
+                    cap = "┃".bright_blue().bold(),
                     width = offset + 1,
-                    start_n = format!("{:<offset$}|", lines.start + 1)
+                    start_n = format!("{:<offset$}┃", lines.start + 1)
                         .bright_blue()
                         .bold(),
                     dot_n = format!("{:<offset$}", "...").bright_blue().bold(),
-                    end_n = format!("{:<offset$}|", lines.end + 1).bright_blue().bold(),
+                    end_n = format!("{:<offset$}┃", lines.end + 1).bright_blue().bold(),
                     start_pointer = format!(
-                        ",-{blank:->start$}{blank:^>length$}",
+                        "╭─{blank:·>start$}{blank:—>length$}",
+                        
                         blank = "",
                         start = col_n - 1,
                         length = start.len() - col_n + 1,
                     )
                     .color(arrow_color),
-                    end_pointer = format!("'-{blank:^>length$}", blank = "", length = end_col)
+                    end_pointer = format!("╰─{blank:—>length$}", blank = "", length = end_col)
                         .color(arrow_color),
-                    pipe = "|".color(arrow_color)
+                    pipe = "│".color(arrow_color)
                 ),
                 offset,
             )
@@ -250,23 +305,23 @@ impl SerialReporter {
             (
                 format!(
                     "\
-                    {arrow:>arr_space$} {name}:{line_n}:{col_n}\n\
+                    {arrow:>arr_space$} [{name}:{line_n}:{col_n}]\n\
                     {cap:>width$}\n\
-                    {n} {line}\n\
+                    {n}{cap} {line}\n\
                     {cap:>width$} {pointer}\
                     ",
                     arrow = "-->".bright_blue().bold(),
-                    name = file,
-                    cap = "|".bright_blue().bold(),
+                    name = file.bold().bright_cyan().underline(),
+                    cap = "┃".bright_blue().bold(),
                     width = offset + 1,
                     arr_space = offset + 2,
-                    n = format!("{line_n:<offset$}|").bright_blue().bold(),
+                    n = format!("{line_n:<offset$}").bright_blue().bold(),
                     pointer = format!(
-                        "{blank:>start$}{blank:^>length$}",
+                        "{blank:>start$}{blank:‾>length$}",
                         blank = "",
                         start = col_n - 1,
                         length = span.end() - span.start(),
-                    )
+                    ).bold()
                     .color(arrow_color),
                 ),
                 offset,
@@ -277,7 +332,7 @@ impl SerialReporter {
     pub fn location(&self, span: Span) -> Location {
         let lookup = &self
             .lookups
-            .get(span.lookup_key())
+            .get(span.lookup())
             .expect("span should refer to an already registered file")
             .1;
 
@@ -319,11 +374,12 @@ impl SerialReporter {
     }
 }
 
-impl Default for SerialReporter {
+impl Default for TerminalReporter {
     fn default() -> Self {
-        SerialReporter {
+        TerminalReporter {
             diagnostics: Vec::new(),
             lookups: SlotMap::with_key(),
+            filter: LevelFilter::Debug,
         }
     }
 }

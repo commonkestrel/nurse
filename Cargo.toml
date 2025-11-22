@@ -18,14 +18,17 @@ slotmap = "1.0.7"
 concat-idents = "1.1.5"
 
 [features]
-default = ["serial"]
+default = ["terminal"]
 tokio = ["dep:tokio"]
 smol = ["dep:smol"]
-serial = ["dep:colored"]
+terminal = ["dep:colored"]
 lsp = ["dep:lsp-types", "dep:url"]
 
 [[example]]
-name = "serial"
+name = "math"
+
+[[example]]
+name = "terminal"
 
 [dev-dependencies]
 logos = "0.14"
