@@ -28,7 +28,7 @@ fn main() -> io::Result<()> {
     reporter.report(error!("unable to compile due to previous errors"));
 
     // Emit all messages that were previously reported to stdout
-    reporter.emit_all(&mut io::stdout())
+    reporter.emit_all()
 }
 ```
 

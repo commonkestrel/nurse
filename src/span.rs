@@ -6,6 +6,7 @@ use std::{
 
 use crate::reporter::LookupKey;
 
+/// A token associated with a [`Span`].
 #[derive(PartialEq, Clone)]
 pub struct Spanned<T> {
     inner: T,
@@ -49,7 +50,14 @@ impl<T> Spanned<T> {
     /// ## Example
     ///
     /// ```rust
-    ///
+    /// # use nurse::prelude::*;
+    /// # let mut reporter = TerminalReporter::default();
+    /// # let key = reporter.register_file("example.txt", "123");
+    /// # let span = Span::new(key, 0..3);
+    /// let mut token = Spanned::new(123, span);
+    /// token = token.map(|tok| tok * 2);
+    /// 
+    /// assert_eq!(token.into_inner(), 246);
     /// ```
     pub fn map<M, O>(self, map: M) -> Spanned<O>
     where
@@ -98,6 +106,7 @@ pub struct Span {
     pub(crate) end: usize,
 }
 
+/// A range of characters within a file.
 #[cfg(feature = "terminal")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span {

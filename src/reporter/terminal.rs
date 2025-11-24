@@ -1,37 +1,59 @@
-#[cfg(not(any(feature = "smol", feature = "tokio")))]
-use std::io;
-
-#[cfg(feature = "smol")]
-use smol::io::{self, AsyncWriteExt};
-
-#[cfg(feature = "tokio")]
-use tokio::io::{self, AsyncWriteExt};
-
+#[cfg(not(feature = "smol"))]
+use std::io::{self, Write};
+use anstream::{AutoStream, stream::{AsLockedWrite, RawStream}};
 use colored::{Color, Colorize};
 use slotmap::SlotMap;
 
+#[cfg(feature = "smol")]
+use smol::{Unblock, io::AsyncWriteExt};
+
 use crate::{
-    diagnostic::{Diagnostic, LevelFilter},
-    lookup::{Location, Lookup},
-    span::Span,
+    Note, diagnostic::{Diagnostic, LevelFilter}, lookup::{Location, Lookup}, span::Span
 };
 
 use super::LookupKey;
 
-#[derive(Debug, Clone)]
-pub struct TerminalReporter {
+#[cfg(not(feature = "smol"))]
+type Emitter<T> = AutoStream<T>;
+
+#[cfg(feature = "smol")]
+type Emitter<T> = Unblock<AutoStream<T>>;
+
+fn new_emitter<T: RawStream>(emitter: T) -> Emitter<T> {
+    #[cfg(not(feature = "smol"))]
+    return AutoStream::auto(emitter);
+    #[cfg(feature = "smol")]
+    return Unblock::new(AutoStream::auto(emitter))
+}
+
+/// A reporter that formats and displays reported diagnostics
+/// to the terminal.
+#[derive(Debug)]
+pub struct TerminalReporter<T: RawStream + AsLockedWrite + Send + 'static> {
     diagnostics: Vec<Diagnostic>,
     lookups: SlotMap<LookupKey, (String, Lookup)>,
     filter: LevelFilter,
+    emitter: Emitter<T>,
 }
 
-impl TerminalReporter {
-    /// Creates an empty `TerminalReporter` with the given filter level.
-    pub fn new(filter: LevelFilter) -> TerminalReporter {
+impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
+    /// Creates an empty `TerminalReporter` with the given emitter.
+    pub fn new(emitter: T) -> TerminalReporter<T> {
+        TerminalReporter {
+            diagnostics: Vec::new(),
+            lookups: SlotMap::with_key(),
+            filter: LevelFilter::Debug,
+            emitter: new_emitter(emitter),
+        }
+    }
+
+    /// Creates an empty `TerminalReporter` with the given emitter and filter level.
+    pub fn filtered(emitter: T, filter: LevelFilter) -> TerminalReporter<T> {
         TerminalReporter {
             diagnostics: Vec::new(),
             lookups: SlotMap::with_key(),
             filter,
+            emitter: new_emitter(emitter),
         }
     }
 
@@ -48,21 +70,16 @@ impl TerminalReporter {
 
     /// Prints a diagnostic to the given emitter,
     /// generally [`Stdout`](std::io::Stdout).
-    #[cfg(not(any(feature = "smol", feature = "tokio")))]
-    pub fn emit<E: MaybeTerminal>(
-        &self,
-        emitter: &mut E,
+    #[cfg(not(feature = "smol"))]
+    pub fn emit(
+        &mut self,
         diagnostic: Diagnostic,
     ) -> io::Result<()> {
         if !self.filter.passes(diagnostic.level) {
             return Ok(());
         }
 
-        if emitter.is_terminal() {
-            Self::emit_fancy(&self.lookups, emitter, diagnostic)
-        } else {
-            Self::raw_emit(emitter, diagnostic)
-        }
+        self.emit_fancy(diagnostic)
     }
 
     #[cfg(any(feature = "smol", feature = "tokio"))]
@@ -74,20 +91,15 @@ impl TerminalReporter {
         feature = "tokio",
         doc = "Prints a diagnostic to the given emitter, generally [`Stdout`](tokio::io::Stdout)."
     )]
-    pub async fn emit<E: MaybeAsyncTerminal + std::marker::Unpin>(
-        &self,
-        emitter: &mut E,
+    pub async fn emit(
+        &mut self,
         diagnostic: Diagnostic,
     ) -> std::io::Result<()> {
         if !self.filter.passes(diagnostic.level) {
             return Ok(());
         }
 
-        if emitter.is_terminal() {
-            Self::emit_fancy(&self.lookups, emitter, diagnostic).await
-        } else {
-            Self::raw_emit(emitter, diagnostic).await
-        }
+        self.emit_fancy(diagnostic).await
     }
 
     /// Prints all reported diagnostics to the provided `emitter`,
@@ -95,22 +107,19 @@ impl TerminalReporter {
     ///
     /// Clears the store of reported diagnostics,
     /// causing subsequent calls not to repeat already emitted diagnostics.
-    #[cfg(not(any(feature = "smol", feature = "tokio")))]
-    pub fn emit_all<E: MaybeTerminal>(&mut self, emitter: &mut E) -> io::Result<()> {
+    #[cfg(not(feature = "smol"))]
+    pub fn emit_all(&mut self) -> io::Result<()> {
         let mut result = Ok(());
 
-        for diagnostic in self.diagnostics.drain(..) {
+        let mut diagnostics = Vec::new();
+        std::mem::swap(&mut diagnostics, &mut self.diagnostics);
+
+        for diagnostic in diagnostics {
             if !self.filter.passes(diagnostic.level) {
                 continue;
             }
 
-            let written = if emitter.is_terminal() {
-                Self::emit_fancy(&self.lookups, emitter, diagnostic)
-            } else {
-                Self::raw_emit(emitter, diagnostic)
-            };
-
-            if let Err(err) = written {
+            if let Err(err) = self.emit_fancy(diagnostic) {
                 result = Err(err);
             }
         }
@@ -130,123 +139,110 @@ impl TerminalReporter {
     ///
     /// Clears the store of reported diagnostics,
     /// causing subsequent calls not to repeat already emitted diagnostics.
-    pub async fn emit_all<E: MaybeAsyncTerminal + std::marker::Unpin>(
+    pub async fn emit_all(
         &mut self,
-        emitter: &mut E,
-    ) -> io::Result<()> {
+    ) -> std::io::Result<()> {
         let mut result = Ok(());
 
-        for diagnostic in self.diagnostics.drain(..) {
+        let mut diagnostics = Vec::new();
+        std::mem::swap(&mut diagnostics, &mut self.diagnostics);
+
+        for diagnostic in diagnostics {
             if !self.filter.passes(diagnostic.level) {
                 continue;
             }
 
-            let written = if emitter.is_terminal() {
-                Self::emit_fancy(&self.lookups, emitter, diagnostic).await
-            } else {
-                Self::raw_emit(emitter, diagnostic).await
-            };
-
-            if let Err(err) = written {
+            if let Err(err) = self.emit_fancy(diagnostic).await {
                 result = Err(err);
             }
         }
 
+        self.diagnostics = Vec::new();
+
         result
     }
 
-    #[cfg(not(any(feature = "smol", feature = "tokio")))]
-    fn raw_emit<E: io::Write>(emitter: &mut E, diagnostic: Diagnostic) -> io::Result<()> {
-        let title = diagnostic.level.title();
-        writeln!(emitter, "{title}: {}", diagnostic.message)
-    }
-
-    #[cfg(any(feature = "smol", feature = "tokio"))]
-    async fn raw_emit<E: io::AsyncWriteExt + std::marker::Unpin>(
-        emitter: &mut E,
-        diagnostic: Diagnostic,
-    ) -> io::Result<()> {
-        let title = diagnostic.level.title();
-        emitter
-            .write_all(format!("{title}: {}", diagnostic.message).as_bytes())
-            .await
-    }
-
-    #[cfg(not(any(feature = "smol", feature = "tokio")))]
-    fn emit_fancy<E: io::Write>(
-        lookups: &SlotMap<LookupKey, (String, Lookup)>,
-        emitter: &mut E,
+    #[cfg(not(feature = "smol"))]
+    fn emit_fancy(
+        &mut self,
         diagnostic: Diagnostic,
     ) -> io::Result<()> {
         let mut note_offset = diagnostic.level.title().len() + 1;
         let message = diagnostic.format_message();
-        writeln!(emitter, "{message}")?;
+        writeln!(self.emitter, "{message}")?;
+
+        let note = match diagnostic.note {
+            Some(Note {ref value, span: Some(span)}) => Some((value.as_str(), span)),
+            _ => None,
+        };
 
         if let Some(span) = diagnostic.span {
-            let (pointer, offset) = Self::pointer(lookups, span, diagnostic.level.color());
+            let (pointer, offset) = Self::pointer(&self.lookups, span, note, diagnostic.level.color());
             note_offset = offset + 1;
-            writeln!(emitter, "{pointer}")?;
+            writeln!(self.emitter, "{pointer}")?;
         }
 
         let note = diagnostic.note.is_some();
-        if let Some(note) = diagnostic.note {
+        if let Some(Note {value, span: None}) = diagnostic.note {
             writeln!(
-                emitter,
+                self.emitter,
                 "{:>note_offset$} {}: {}",
                 "=".bright_blue().bold(),
                 "note".bold(),
-                note.value
+                value
             )?;
         }
 
         if diagnostic.span.is_some() || note {
-            writeln!(emitter)?;
+            writeln!(self.emitter)?;
         }
 
         Ok(())
     }
 
-    #[cfg(any(feature = "smol", feature = "tokio"))]
-    async fn emit_fancy<E: io::AsyncWriteExt + std::marker::Unpin>(
-        lookups: &SlotMap<LookupKey, (String, Lookup)>,
-        emitter: &mut E,
+    #[cfg(feature = "smol")]
+    async fn emit_fancy(
+        &mut self,
         diagnostic: Diagnostic,
-    ) -> io::Result<()> {
+    ) -> std::io::Result<()> {
         let mut note_offset = diagnostic.level.title().len() + 1;
         let message = diagnostic.format_message();
-        emitter.write_all(format!("{message}").as_bytes()).await?;
+        self.emitter.write(format!("{message}").as_bytes()).await?;
+
+        let note = match diagnostic.note {
+            Some(Note {ref value, span: Some(span)}) => Some((value.as_str(), span)),
+            _ => None,
+        };
 
         if let Some(span) = diagnostic.span {
-            let (pointer, offset) = Self::pointer(lookups, span, diagnostic.level.color());
+            let (pointer, offset) = Self::pointer(&self.lookups, span, note, diagnostic.level.color());
             note_offset = offset + 1;
-            emitter.write_all(format!("{pointer}").as_bytes()).await?;
+            self.emitter.write_all(format!("{pointer}").as_bytes()).await?;
         }
 
         let note = diagnostic.note.is_some();
-        if let Some(note) = diagnostic.note {
-            emitter
-                .write_all(
-                    format!(
-                        "{:>note_offset$} {}: {}",
-                        "=".bright_blue().bold(),
-                        "note".bold(),
-                        note.value
-                    )
-                    .as_bytes(),
-                )
-                .await?;
+        if let Some(Note {value, span: None}) = diagnostic.note {
+            self.emitter.write_all(
+                format!(
+                    "{:>note_offset$} {}: {}",
+                    "=".bright_blue().bold(),
+                    "note".bold(),
+                    value
+                ).as_bytes()
+            ).await?;
         }
 
         if diagnostic.span.is_some() || note {
-            emitter.write(b"\n").await?;
+            self.emitter.write(b"\n").await?;
         }
 
         Ok(())
     }
 
-    pub fn pointer(
+    fn pointer(
         lookups: &SlotMap<LookupKey, (String, Lookup)>,
         span: Span,
+        note: Option<(&str, Span)>,
         arrow_color: Color,
     ) -> (String, usize) {
         let (file, lookup) = lookups.get(span.lookup()).expect("span should ");
@@ -329,6 +325,23 @@ impl TerminalReporter {
         }
     }
 
+    /// Gets the line-column location of the span in its file.
+    /// 
+    /// ## Panics
+    /// 
+    /// This function will panic if `span` refers to a span in a file not registered with this reporter, e.g.
+    /// 
+    /// ```should_panic
+    /// # use nurse::prelude::*;
+    /// let mut reporter1 = TerminalReporter::default();
+    /// let reporter2 = TerminalReporter::default();
+    /// 
+    /// let key = reporter1.register_file("example.txt", r#""hello world""#);
+    /// let span = Span::new(key, 0..1);
+    /// // Should panic!
+    /// reporter2.location(span);
+    /// ```
+    /// 
     pub fn location(&self, span: Span) -> Location {
         let lookup = &self
             .lookups
@@ -340,24 +353,63 @@ impl TerminalReporter {
         Location { line, column }
     }
 
+    /// Adds the provided `diagnostic` to the inner collection.
+    /// 
+    /// Will be emitted when [`emit_all`](TerminalReporter::emit_all) is called.
     pub fn report(&mut self, diagnostic: Diagnostic) {
         self.diagnostics.push(diagnostic);
     }
 
+    /// Adds the provided list of `diagnostics` to the inner collection.
+    /// 
+    /// All will be emitted when [`emit_all`](TerminalReporter::emit_all) is called.
     pub fn report_all(&mut self, mut diagnostics: Vec<Diagnostic>) {
         self.diagnostics.append(&mut diagnostics);
     }
 
+    /// Returns `true` if any diagnostics in the inner collection are of level [`Error`](crate::Level::Error),
+    /// otherwise returns `false`.
     pub fn has_errors(&self) -> bool {
         self.diagnostics
             .iter()
             .any(|diagnostic| diagnostic.is_error())
     }
 
+    /// Returns `true` if there are no diagnostics stored in the inner collection,
+    /// otherwise returns `false`.
     pub fn is_empty(&self) -> bool {
         self.diagnostics.is_empty()
     }
 
+    /// Returns a single character-wide span at the end of the file referred to by `key`.
+    /// 
+    /// This is useful raising errors if you expect a token,
+    /// but instead find the end of a file.
+    /// 
+    /// ## Panics
+    /// 
+    /// This function will panic if `key` refers to a file not registered with this reporter, e.g.
+    /// 
+    /// ```should_panic
+    /// # use nurse::TerminalReporter;
+    /// let mut reporter1 = TerminalReporter::default();
+    /// let reporter2 = TerminalReporter::default();
+    /// 
+    /// let key = reporter1.register_file("example.txt", r#""hello world""#);
+    /// // Should panic!
+    /// reporter2.eof_span(key);
+    /// ```
+    /// 
+    /// ## Example
+    /// 
+    /// ```rust
+    /// # use nurse::prelude::*;
+    /// # let mut reporter = TerminalReporter::default();
+    /// let key = reporter.register_file("example.txt", "3 + ");
+    /// let eof_span = reporter.eof_span(key);
+    /// 
+    /// reporter.report(error!(eof_span, "expected token, found EOF"));
+    /// ```
     pub fn eof_span(&self, key: LookupKey) -> Span {
         let (_, lookup) = self
             .lookups
@@ -374,33 +426,13 @@ impl TerminalReporter {
     }
 }
 
-impl Default for TerminalReporter {
+impl Default for TerminalReporter<std::io::Stdout> {
     fn default() -> Self {
         TerminalReporter {
             diagnostics: Vec::new(),
             lookups: SlotMap::with_key(),
             filter: LevelFilter::Debug,
+            emitter: new_emitter(std::io::stdout()),
         }
     }
-}
-
-#[cfg(not(any(feature = "smol", feature = "tokio")))]
-pub trait MaybeTerminal: io::Write + std::io::IsTerminal {}
-#[cfg(not(any(feature = "smol", feature = "tokio")))]
-impl<T: io::Write + std::io::IsTerminal> MaybeTerminal for T {}
-
-#[cfg(feature = "smol")]
-pub trait MaybeAsyncTerminal: smol::io::AsyncWriteExt + std::io::IsTerminal {}
-#[cfg(feature = "smol")]
-impl<T: smol::io::AsyncWriteExt + std::marker::Unpin + std::io::IsTerminal> MaybeAsyncTerminal
-    for T
-{
-}
-
-#[cfg(feature = "tokio")]
-pub trait MaybeAsyncTerminal: tokio::io::AsyncWriteExt + std::io::IsTerminal {}
-#[cfg(feature = "tokio")]
-impl<T: tokio::io::AsyncWriteExt + std::marker::Unpin + std::io::IsTerminal> MaybeAsyncTerminal
-    for T
-{
 }

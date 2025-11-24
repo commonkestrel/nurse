@@ -18,7 +18,9 @@ fn main() -> io::Result<()> {
     reporter.report(error!(open_paren_span, "missing closing parenthesis"));
     reporter.report(debug!(fn_span, "code block found"));
     reporter.report(error!("unable to compile due to previous errors"));
+    reporter.report(warning!("something warning"));
+    reporter.report(info!("something info"));
 
     // Emit all messages that were previously reported to stdout
-    reporter.emit_all(&mut io::stdout())
+    reporter.emit_all()
 }

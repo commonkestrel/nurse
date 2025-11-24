@@ -1,4 +1,4 @@
-use std::{fs, process::ExitCode};
+use std::{fs, io::Stdout, process::ExitCode};
 
 use logos::{Lexer, Logos};
 use nurse::prelude::*;
@@ -30,7 +30,7 @@ fn main() -> ExitCode {
 
     if reporter.has_errors() {
         reporter.report(error!("unable to compile due to previous syntax errors"));
-        let _ = reporter.emit_all(&mut std::io::stdout());
+        let _ = reporter.emit_all();
 
         return ExitCode::FAILURE;
     }
@@ -38,17 +38,14 @@ fn main() -> ExitCode {
     let expr = parse_expression(&tokens, &mut 0, &mut reporter, eof);
     if reporter.has_errors() {
         reporter.report(error!("unable to compile due to previous syntax errors"));
-        let _ = reporter.emit_all(&mut std::io::stdout());
+        let _ = reporter.emit_all();
 
         return ExitCode::FAILURE;
     }
 
-    let _ = reporter.emit_all(&mut std::io::stdout());
+    let _ = reporter.emit_all();
 
-    let _ = reporter.emit(
-        &mut std::io::stdout(),
-        debug!("Result: {}", expr.into_inner().eval()),
-    );
+    let _ = reporter.emit(debug!("Result: {}", expr.into_inner().eval()));
 
     ExitCode::SUCCESS
 }
@@ -241,7 +238,7 @@ enum UnaryOp {
 fn parse_expression(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut TerminalReporter,
+    reporter: &mut TerminalReporter<Stdout>,
     eof: Span,
 ) -> Spanned<Expr> {
     let mut a = parse_terminal(stream, index, reporter, eof);
@@ -272,7 +269,7 @@ fn parse_expression(
 fn parse_terminal(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut TerminalReporter,
+    reporter: &mut TerminalReporter<Stdout>,
     eof: Span,
 ) -> Spanned<Expr> {
     let mut a = parse_factor(stream, index, reporter, eof);
@@ -336,7 +333,7 @@ fn parse_terminal(
 fn parse_factor(
     stream: &Vec<Spanned<Token>>,
     index: &mut usize,
-    reporter: &mut TerminalReporter,
+    reporter: &mut TerminalReporter<Stdout>,
     eof: Span,
 ) -> Spanned<Expr> {
     match stream.get(*index) {

@@ -5,7 +5,7 @@ use std::{cmp::Ordering, ops::Range};
 /// Internal file lookup-table used in [`Reporter`](crate::reporter::Reporter)s
 /// to locate lines, columns, and text.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Lookup {
+pub(crate) struct Lookup {
     source: String,
     heads: Box<[usize]>,
 }
@@ -29,7 +29,7 @@ impl Lookup {
     pub fn line_n(&self, index: usize) -> usize {
         match self.heads.binary_search(&index) {
             Ok(line) => line,
-            Err(insert) => (insert - 1),
+            Err(insert) => insert - 1,
         }
     }
 
@@ -44,13 +44,6 @@ impl Lookup {
     #[inline]
     pub fn col_from_line(&self, line: usize, index: usize) -> usize {
         index - self.heads[line]
-    }
-
-    pub fn multiline(&self, range: Range<usize>) -> bool {
-        let starting_line = self.line_n(range.start);
-        let next_start = self.heads[starting_line + 1];
-
-        range.end <= next_start
     }
 
     pub fn line(&self, index: usize) -> &str {

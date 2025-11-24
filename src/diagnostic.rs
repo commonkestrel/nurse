@@ -26,7 +26,7 @@ macro_rules! diagnostic_level {
         ///
         /// ```rust
         /// use nurse::prelude::*;
-        /// use nurse::diagnostic::Level;
+        /// use nurse::Level;
         ///
         /// # fn main() {
         /// let message = "Maybe a missing parenthesis?";
@@ -41,7 +41,7 @@ macro_rules! diagnostic_level {
         ///
         /// ```rust
         /// use nurse::prelude::*;
-        /// use nurse::diagnostic::Level;
+        /// use nurse::Level;
         ///
         /// # fn main() {
         /// # let mut reporter = TerminalReporter::default();
@@ -172,7 +172,7 @@ impl Diagnostic {
 
     /// Sets the optional note of the diagnostic with the given span.
     #[inline]
-    pub fn with_spanned_note<S: Into<String>>(mut self, note: S, span: Span) -> Diagnostic {
+    pub fn with_spanned_note<S: Into<String>>(mut self, span: Span, note: S) -> Diagnostic {
         self.set_spanned_note(note, span);
         self
     }
@@ -276,8 +276,8 @@ impl Level {
 
     pub(crate) fn color(&self) -> Color {
         match self {
-            Level::Error => Color::Red,
-            Level::Warn => Color::Yellow,
+            Level::Error => Color::BrightRed,
+            Level::Warn => Color::BrightYellow,
             Level::Info => Color::Cyan,
             Level::Debug => Color::BrightMagenta,
         }
