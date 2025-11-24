@@ -56,7 +56,7 @@ impl<T> Spanned<T> {
     /// # let span = Span::new(key, 0..3);
     /// let mut token = Spanned::new(123, span);
     /// token = token.map(|tok| tok * 2);
-    /// 
+    ///
     /// assert_eq!(token.into_inner(), 246);
     /// ```
     pub fn map<M, O>(self, map: M) -> Spanned<O>

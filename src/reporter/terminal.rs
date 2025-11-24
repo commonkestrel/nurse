@@ -1,14 +1,20 @@
-#[cfg(not(feature = "smol"))]
-use std::io::{self, Write};
-use anstream::{AutoStream, stream::{AsLockedWrite, RawStream}};
+use anstream::{
+    stream::{AsLockedWrite, RawStream},
+    AutoStream,
+};
 use colored::{Color, Colorize};
 use slotmap::SlotMap;
+#[cfg(not(feature = "smol"))]
+use std::io::{self, Write};
 
 #[cfg(feature = "smol")]
-use smol::{Unblock, io::AsyncWriteExt};
+use smol::{io::AsyncWriteExt, Unblock};
 
 use crate::{
-    Note, diagnostic::{Diagnostic, LevelFilter}, lookup::{Location, Lookup}, span::Span
+    diagnostic::{Diagnostic, LevelFilter},
+    lookup::{Location, Lookup},
+    span::Span,
+    Note,
 };
 
 use super::LookupKey;
@@ -23,7 +29,7 @@ fn new_emitter<T: RawStream>(emitter: T) -> Emitter<T> {
     #[cfg(not(feature = "smol"))]
     return AutoStream::auto(emitter);
     #[cfg(feature = "smol")]
-    return Unblock::new(AutoStream::auto(emitter))
+    return Unblock::new(AutoStream::auto(emitter));
 }
 
 /// A reporter that formats and displays reported diagnostics
@@ -71,10 +77,7 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     /// Prints a diagnostic to the given emitter,
     /// generally [`Stdout`](std::io::Stdout).
     #[cfg(not(feature = "smol"))]
-    pub fn emit(
-        &mut self,
-        diagnostic: Diagnostic,
-    ) -> io::Result<()> {
+    pub fn emit(&mut self, diagnostic: Diagnostic) -> io::Result<()> {
         if !self.filter.passes(diagnostic.level) {
             return Ok(());
         }
@@ -91,10 +94,7 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
         feature = "tokio",
         doc = "Prints a diagnostic to the given emitter, generally [`Stdout`](tokio::io::Stdout)."
     )]
-    pub async fn emit(
-        &mut self,
-        diagnostic: Diagnostic,
-    ) -> std::io::Result<()> {
+    pub async fn emit(&mut self, diagnostic: Diagnostic) -> std::io::Result<()> {
         if !self.filter.passes(diagnostic.level) {
             return Ok(());
         }
@@ -139,9 +139,7 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     ///
     /// Clears the store of reported diagnostics,
     /// causing subsequent calls not to repeat already emitted diagnostics.
-    pub async fn emit_all(
-        &mut self,
-    ) -> std::io::Result<()> {
+    pub async fn emit_all(&mut self) -> std::io::Result<()> {
         let mut result = Ok(());
 
         let mut diagnostics = Vec::new();
@@ -163,27 +161,28 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     }
 
     #[cfg(not(feature = "smol"))]
-    fn emit_fancy(
-        &mut self,
-        diagnostic: Diagnostic,
-    ) -> io::Result<()> {
+    fn emit_fancy(&mut self, diagnostic: Diagnostic) -> io::Result<()> {
         let mut note_offset = diagnostic.level.title().len() + 1;
         let message = diagnostic.format_message();
         writeln!(self.emitter, "{message}")?;
 
         let note = match diagnostic.note {
-            Some(Note {ref value, span: Some(span)}) => Some((value.as_str(), span)),
+            Some(Note {
+                ref value,
+                span: Some(span),
+            }) => Some((value.as_str(), span)),
             _ => None,
         };
 
         if let Some(span) = diagnostic.span {
-            let (pointer, offset) = Self::pointer(&self.lookups, span, note, diagnostic.level.color());
+            let (pointer, offset) =
+                Self::pointer(&self.lookups, span, note, diagnostic.level.color());
             note_offset = offset + 1;
             writeln!(self.emitter, "{pointer}")?;
         }
 
         let note = diagnostic.note.is_some();
-        if let Some(Note {value, span: None}) = diagnostic.note {
+        if let Some(Note { value, span: None }) = diagnostic.note {
             writeln!(
                 self.emitter,
                 "{:>note_offset$} {}: {}",
@@ -201,35 +200,41 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     }
 
     #[cfg(feature = "smol")]
-    async fn emit_fancy(
-        &mut self,
-        diagnostic: Diagnostic,
-    ) -> std::io::Result<()> {
+    async fn emit_fancy(&mut self, diagnostic: Diagnostic) -> std::io::Result<()> {
         let mut note_offset = diagnostic.level.title().len() + 1;
         let message = diagnostic.format_message();
         self.emitter.write(format!("{message}").as_bytes()).await?;
 
         let note = match diagnostic.note {
-            Some(Note {ref value, span: Some(span)}) => Some((value.as_str(), span)),
+            Some(Note {
+                ref value,
+                span: Some(span),
+            }) => Some((value.as_str(), span)),
             _ => None,
         };
 
         if let Some(span) = diagnostic.span {
-            let (pointer, offset) = Self::pointer(&self.lookups, span, note, diagnostic.level.color());
+            let (pointer, offset) =
+                Self::pointer(&self.lookups, span, note, diagnostic.level.color());
             note_offset = offset + 1;
-            self.emitter.write_all(format!("{pointer}").as_bytes()).await?;
+            self.emitter
+                .write_all(format!("{pointer}").as_bytes())
+                .await?;
         }
 
         let note = diagnostic.note.is_some();
-        if let Some(Note {value, span: None}) = diagnostic.note {
-            self.emitter.write_all(
-                format!(
-                    "{:>note_offset$} {}: {}",
-                    "=".bright_blue().bold(),
-                    "note".bold(),
-                    value
-                ).as_bytes()
-            ).await?;
+        if let Some(Note { value, span: None }) = diagnostic.note {
+            self.emitter
+                .write_all(
+                    format!(
+                        "{:>note_offset$} {}: {}",
+                        "=".bright_blue().bold(),
+                        "note".bold(),
+                        value
+                    )
+                    .as_bytes(),
+                )
+                .await?;
         }
 
         if diagnostic.span.is_some() || note {
@@ -253,9 +258,9 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
 
         if lines.len() > 1 {
             let start = lookup.line(lines.start).trim_end();
-            let end = lookup.line(lines.end-1).trim_end();
+            let end = lookup.line(lines.end - 1).trim_end();
 
-            let end_col = lookup.col_from_line(lines.end-1, span.end());
+            let end_col = lookup.col_from_line(lines.end - 1, span.end());
 
             let offset = ((lines.end + 1).ilog10()).max(2) as usize + 2;
 
@@ -282,7 +287,6 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
                     end_n = format!("{:<offset$}┃", lines.end + 1).bright_blue().bold(),
                     start_pointer = format!(
                         "╭─{blank:·>start$}{blank:—>length$}",
-                        
                         blank = "",
                         start = col_n - 1,
                         length = start.len() - col_n + 1,
@@ -317,7 +321,8 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
                         blank = "",
                         start = col_n - 1,
                         length = span.end() - span.start(),
-                    ).bold()
+                    )
+                    .bold()
                     .color(arrow_color),
                 ),
                 offset,
@@ -326,22 +331,22 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     }
 
     /// Gets the line-column location of the span in its file.
-    /// 
+    ///
     /// ## Panics
-    /// 
+    ///
     /// This function will panic if `span` refers to a span in a file not registered with this reporter, e.g.
-    /// 
+    ///
     /// ```should_panic
     /// # use nurse::prelude::*;
     /// let mut reporter1 = TerminalReporter::default();
     /// let reporter2 = TerminalReporter::default();
-    /// 
+    ///
     /// let key = reporter1.register_file("example.txt", r#""hello world""#);
     /// let span = Span::new(key, 0..1);
     /// // Should panic!
     /// reporter2.location(span);
     /// ```
-    /// 
+    ///
     pub fn location(&self, span: Span) -> Location {
         let lookup = &self
             .lookups
@@ -354,14 +359,14 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     }
 
     /// Adds the provided `diagnostic` to the inner collection.
-    /// 
+    ///
     /// Will be emitted when [`emit_all`](TerminalReporter::emit_all) is called.
     pub fn report(&mut self, diagnostic: Diagnostic) {
         self.diagnostics.push(diagnostic);
     }
 
     /// Adds the provided list of `diagnostics` to the inner collection.
-    /// 
+    ///
     /// All will be emitted when [`emit_all`](TerminalReporter::emit_all) is called.
     pub fn report_all(&mut self, mut diagnostics: Vec<Diagnostic>) {
         self.diagnostics.append(&mut diagnostics);
@@ -382,32 +387,32 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     }
 
     /// Returns a single character-wide span at the end of the file referred to by `key`.
-    /// 
+    ///
     /// This is useful raising errors if you expect a token,
     /// but instead find the end of a file.
-    /// 
+    ///
     /// ## Panics
-    /// 
+    ///
     /// This function will panic if `key` refers to a file not registered with this reporter, e.g.
-    /// 
+    ///
     /// ```should_panic
     /// # use nurse::TerminalReporter;
     /// let mut reporter1 = TerminalReporter::default();
     /// let reporter2 = TerminalReporter::default();
-    /// 
+    ///
     /// let key = reporter1.register_file("example.txt", r#""hello world""#);
     /// // Should panic!
     /// reporter2.eof_span(key);
     /// ```
-    /// 
+    ///
     /// ## Example
-    /// 
+    ///
     /// ```rust
     /// # use nurse::prelude::*;
     /// # let mut reporter = TerminalReporter::default();
     /// let key = reporter.register_file("example.txt", "3 + ");
     /// let eof_span = reporter.eof_span(key);
-    /// 
+    ///
     /// reporter.report(error!(eof_span, "expected token, found EOF"));
     /// ```
     pub fn eof_span(&self, key: LookupKey) -> Span {
