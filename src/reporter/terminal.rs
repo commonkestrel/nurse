@@ -376,6 +376,22 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
         reported.append(&mut diagnostics);
     }
 
+    /// Returns `true` if any diagnostics in the inner collection are of level [`Error`](crate::Level::Error),
+    /// otherwise returns `false`.
+    pub async fn has_errors(&self) -> bool {
+        let diagnostics = self.diagnostics.lock().await;
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.is_error())
+    }
+
+    /// Returns `true` if there are no diagnostics stored in the inner collection,
+    /// otherwise returns `false`.
+    pub async fn is_empty(&self) -> bool {
+        let diagnostics = self.diagnostics.lock().await;
+        diagnostics.is_empty()
+    }
+
     /// Prints a diagnostic to the internal emitter, `stdout` by default.
     pub async fn emit(&mut self, diagnostic: Diagnostic) -> std::io::Result<()> {
         if !self.filter.passes(diagnostic.level) {
