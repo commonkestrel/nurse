@@ -92,11 +92,11 @@ impl<T: RawStream + AsLockedWrite> TerminalReporter<T> {
     /// Prints a diagnostic to the given emitter,
     /// generally [`Stdout`](std::io::Stdout).
     pub fn emit(&mut self, diagnostic: Diagnostic) -> io::Result<()> {
-        if !self.filter.passes(diagnostic.level) {
-            return Ok(());
+        if self.filter.passes(diagnostic.level) {
+            return self.emit_fancy(diagnostic);
         }
 
-        self.emit_fancy(diagnostic)
+        Ok(())
     }
 
     /// Prints all reported diagnostics to the provided `emitter`,
@@ -430,7 +430,7 @@ impl<T: RawStream + AsLockedWrite + Send + 'static> TerminalReporter<T> {
     async fn emit_fancy(&mut self, diagnostic: Diagnostic) -> std::io::Result<()> {
         let mut note_offset = diagnostic.level.title().len() + 1;
         let message = diagnostic.format_message();
-        self.emitter.write(format!("{message}").as_bytes()).await?;
+        self.emitter.write(format!("{message}\n").as_bytes()).await?;
 
         let note = match diagnostic.note {
             Some(Note {
