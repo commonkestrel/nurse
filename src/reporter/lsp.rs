@@ -3,8 +3,6 @@ use url::Url;
 
 use crate::{diagnostic::Diagnostic, lookup::Lookup};
 
-use super::Reporter;
-
 pub struct LspReporter {
     diagnostics: Vec<Diagnostic>,
     lookups: HashMap<Url, Lookup>,
