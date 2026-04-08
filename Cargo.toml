@@ -7,6 +7,7 @@ license = "MIT"
 authors = ["commonkestrel"]
 rust-version = "1.78"
 readme = "README.md"
+exclde = ["./misc"]
 
 [dependencies]
 url = { version = "2.5.4", optional = true }
