@@ -7,7 +7,10 @@ license = "MIT"
 authors = ["commonkestrel"]
 rust-version = "1.78"
 readme = "README.md"
-exclde = ["./misc"]
+repository = "https://github.com/commonkestrel/nurse"
+exclude = ["./misc"]
+categories = ["command-line-interface", "parsing"]
+keywords = ["error", "compiler", "diagnostics"]
 
 [dependencies]
 url = { version = "2.5.4", optional = true }
