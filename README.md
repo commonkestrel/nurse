@@ -1,5 +1,8 @@
 # Nurse
 
+> [!CAUTION]
+> This crate is still unfinished, and the format of outputs may change drastically between versions.
+
 Nurse is a diagnostic formatting library designed for internal use in compilers, interpreters, and assemblers.
 Designed after the Rust compiler's error message formatting,
 this crate allows user-facing text-processors to provide users with detailed and informative error messages.
@@ -40,6 +43,6 @@ There are a number of features that allow for additional functionality,
 and are as follows:
 
 - `terminal`: Enabled by default. Allows for diagnostics to be formatted and printed to a writer, commonly stdout.
-- `lsp`: Allows for diagnostics to be reported as a language server message.
+- `lsp` (unfinished): Allows for diagnostics to be reported as a language server message.
 - `smol`: Allows for many of the I/O writing operations to be async using [`smol`](https://github.com/smol-rs/smol).
 - `tokio`: Allows for many of the I/O writing operations to be async using [`tokio`](https://github.com/tokio-rs/tokio)
