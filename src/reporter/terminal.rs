@@ -74,6 +74,19 @@ impl<T: RawStream + AsLockedWrite + Send> TerminalReporter<T> {
             emitter: new_emitter(emitter),
         }
     }
+
+    /// Sets the filter level of the reporter to the given filter level.
+    #[inline]
+    pub fn set_filter(&mut self, filter: LevelFilter) {
+        self.filter = filter;
+    }
+
+    /// Returns the initial terminal reporter with the filter level set to the given filter level.
+    #[inline]
+    pub fn with_filter(mut self, filter: LevelFilter) -> Self {
+        self.filter = filter;
+        self
+    }
 }
 
 #[cfg(not(feature = "smol"))]
